@@ -38,6 +38,9 @@
 #define debug_serial_5 0
 #define debug_test 0
 
+#define ignRpmTooLow            29817 //Count value equal to a Ign period of 150 rpm
+void All_Variable_Update();
+
 void setup(){
   while(debug0){
 
@@ -113,7 +116,7 @@ void loop(){
     for(int f = 0; f < 3001; f++){
       TSTR_Time_Update();
       if(!(f%5)){
-        TSTR_All_Variable_Update();
+        All_Variable_Update();
       }
     }
 
@@ -161,11 +164,38 @@ void loop(){
       Serial.print(F("Free RAM ="));
       Serial.println(freeMemory());
     }    
-    TSTR_All_Variable_Update();
+    All_Variable_Update();
     
     TSKR_Task_Clear(t_5ms);
   }
 
 }
 
+//Added 10/30 After clean safe of TSTR.h and .ino
 
+void All_Variable_Update(){
+  //IGN
+  long time = TSTR_Time_READ();
+  //The buffer is used because the TC timer does have a hardware buffer and this buffere is loaded on every TC TOP MATCH interrupt
+  uint16_t period = limit(TSTR_Linear_Variable_Update(time, IgnPeriod), IGN_PER_MAX, IGN_PER_MIN);
+  uint16_t pw     = limit(TSTR_Linear_Variable_Update(time, IgnDwell), period, IGN_PW_MIN);
+  if(period > ignRpmTooLow){
+    pw = 0;
+  }
+  TIMR_IGN_Buffer_Update(period, pw);
+
+  //INJ
+  //The TCC hardware buffer is used and thus a interrupt is not needed to be used.
+  TIMR_INJ_Buffer_Update(TSTR_Linear_Variable_Update(time, InjPeriod), TSTR_Linear_Variable_Update(time, InjPW));
+  //AFM
+  ARMR_AFM_Update(TSTR_Linear_Variable_Update(time, AFM));
+  //BATT
+  //The TCC hardware buffer is used and thus a interrupt is not needed to be used.
+  TIMR_BATT_CCB_Update(TSTR_Linear_Variable_Update(time, BATT));
+  //TEMP
+  //The TCC hardware buffer is used and thus a interrupt is not needed to be used.
+  TIMR_TEMP_CCB_Update(TSTR_Linear_Variable_Update(time, TEMP));
+  //RUNNING
+  digitalWrite(PINC_RUNNING, TSTR_Linear_Variable_Update(time, RUNNING));
+
+}
